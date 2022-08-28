@@ -33,7 +33,8 @@ async function scrape(){
         
        
     return {
-    url: n.getAttribute('href'),
+    url: n.getAttribute('href') as string,
+    name: n.textContent,
     text,
     cities,
     raw
