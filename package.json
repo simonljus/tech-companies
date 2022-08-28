@@ -1,0 +1,29 @@
+{
+  "name": "tech-companies",
+  "version": "1.0.0",
+  "description": "Script for listing all tech companies",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node --esm src/index.ts",
+    "build":"tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simonljus/tech-companies.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/simonljus/tech-companies/issues"
+  },
+  "homepage": "https://github.com/simonljus/tech-companies#readme",
+  "devDependencies": {
+    "ts-node": "^10.9.1",
+    "typescript": "^4.8.2"
+  },
+  "dependencies": {
+    "cross-fetch": "^3.1.5",
+    "node-html-parser": "^5.4.2-0"
+  }
+}
