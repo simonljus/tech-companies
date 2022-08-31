@@ -2,7 +2,7 @@ import parse, { NodeType } from "node-html-parser";
 import 'dotenv/config'
 import * as natural from 'natural';
 import fetch from "cross-fetch";
-import { Client } from "@notionhq/client";
+import { APIErrorCode, APIResponseError, Client } from "@notionhq/client";
 const notion = new Client({ auth: process.env.NOTION_KEY });
 const databaseId = process.env.NOTION_DATABASE_ID as string;
 interface Company {
@@ -11,6 +11,7 @@ interface Company {
   name: string;
   url: string;
   raw: string;
+  tags: Array<string>
 }
 const a: string = "hello ts";
 function getTags(){
@@ -75,6 +76,21 @@ function getTags(){
         ['visualization','vr ar visualize graph'],
         ['web3','web3']
     ])
+    const stemMap = new Map<string,Set<string>>()
+    tagMap.forEach((tokens,tag) =>  
+        {
+            const stemmed = natural.PorterStemmer.tokenizeAndStem(tokens)
+            stemmed.forEach(word=>{
+                if(stemMap.has(word)){
+                    stemMap.get(word)?.add(tag)
+                }
+                else{
+                    stemMap.set(word,new Set([tag]))
+                }
+            })
+        }
+    );
+    return stemMap
 }
 async function scrape() {
   const url = "https://www.swedishtechnews.com/ultimate-swedish-startups-list/";
@@ -83,6 +99,7 @@ async function scrape() {
   let prevlink: null | string = null;
   let prevtext: null | string = null;
   const withinParenthesis = /\(([^)]+)\)/;
+  const tagMap = getTags();
   const companies: Array<Company> = root
     .querySelectorAll(
       "body > div.site > div > div > main > article > div.post-content.gh-content.kg-canvas > p:nth-child(1) > a "
@@ -118,37 +135,64 @@ async function scrape() {
         city = "";
       }
       const cities = city.split(/and|&/).map((c) => c.trim());
-
+      const tokens = natural.PorterStemmer.tokenizeAndStem(text)
+      const tags = new Array<string>()
+      const empty = new Set<string>();
+      tokens.forEach(token=> {
+        const tokenTags = tagMap.get(token) || empty 
+        tags.push(...tokenTags)
+      })
       return {
         url: n.getAttribute("href") as string,
         name: n.textContent,
         text,
-        cities,
+        cities: cities.filter(c=> !!c),
         raw,
+        tags: Array.from(new Set<string>(tags)).filter(t=>!!t)
       };
     })
     .slice(3);
     //const allowedCities = new Set(["Stockholm","Uppsala"])
     //companies.filter(c=> c.cities.some(c=> allowedCities.has(c) ))
-    const promises = companies.slice(1000,1100).map(c=> addCompanyToPage(c))
+    const promises = companies.slice(800,1000).map(c=> addCompanyToPage(c))
     const pageIds = await Promise.all(promises)
     return pageIds
 }
 async function addCompanyToPage(company: Company) {
-    console.log(company)
-    console.log({lancaster: natural.LancasterStemmer.tokenizeAndStem(company.text),
-        porter: natural.PorterStemmer.tokenizeAndStem(company.text)})
-  /*const resp = await notion.pages.create({
-    parent: { database_id: databaseId },
-    properties: { 
-        "Name": { title: [{ text: { content: company.name } }] },
-        "Description": {rich_text: [{text: {content: company.text}}]},
-        "Link": {url: company.url} ,
-        "Cities": {multi_select: company.cities.map(c=> ({name:c.trim()}))},
-        "Raw": {rich_text: [{text: {content: company.raw}}]},
-    },
-  });
-  return resp.id*/
+    try {
+        const resp = await notion.pages.create({
+            parent: { database_id: databaseId },
+            properties: { 
+                "Name": { title: [{ text: { content: company.name } }] },
+                "Description": {rich_text: [{text: {content: company.text}}]},
+                "Link": {url: company.url} ,
+                "Cities": {multi_select: company.cities.map(c=> ({name:c.trim()}))},
+                "Raw": {rich_text: [{text: {content: company.raw}}]},
+                "Tags": {multi_select: company.tags.map(t=> ({name: t}))}
+            },
+          });
+          return resp.id
+    }catch(e){
+        const notionError = e as APIResponseError;
+        if(notionError.code === APIErrorCode.ConflictError){
+            console.warn("Conflict with name", company.name)
+            return 0
+        }
+    }
+  
+  
+}
+export function unique<K, V>(items: V[], getKey: (item: V) => K): V[] {
+	const s: Set<K> = new Set();
+	const filtered: Array<V> = [];
+	items?.forEach((item) => {
+		const key = getKey(item);
+		if (!s.has(key)) {
+			s.add(key);
+			filtered.push(item);
+		}
+	});
+	return filtered;
 }
 
 scrape();
