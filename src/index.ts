@@ -210,6 +210,10 @@ export function unique<K, V>(items: V[], getKey: (item: V) => K): V[] {
 async function getPagesFromCursor(startCursor?: string):Promise<QueryDatabaseResponse> {
   return notion.databases.query({database_id: databaseId, sorts:[{property:'Name',direction:'ascending'}],start_cursor: startCursor,page_size:100},);
 }
+/**
+ * The rows in a database could not be accessed earlier
+ * See: https://developers.notion.com/changelog/changes-for-august-31-2022
+ */
 async function getExistingPageNamesSlow() {
   const pages: Array<PageObjectResponse> = []
   let startCursor: string | undefined  = undefined;
