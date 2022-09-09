@@ -210,19 +210,16 @@ export function unique<K, V>(items: V[], getKey: (item: V) => K): V[] {
 async function getPagesFromCursor(startCursor?: string):Promise<QueryDatabaseResponse> {
   return notion.databases.query({database_id: databaseId, sorts:[{property:'Name',direction:'ascending'}],start_cursor: startCursor,page_size:100},);
 }
-async function getExistingPageNames() {
+async function getExistingPageNamesSlow() {
   const pages: Array<PageObjectResponse> = []
   let startCursor: string | undefined  = undefined;
-  while(true){
+  do {
     const res: QueryDatabaseResponse = await getPagesFromCursor(startCursor)
     const results = res.results as Array<PageObjectResponse>
     pages.push(...results)
     startCursor = res.next_cursor || undefined
-    if(!startCursor){
-      break;
-    }
-    
   }
+  while(startCursor)
   const names = new Array<string>()
   const bar2 = new SingleBar({},Presets.shades_classic);
   bar2.start(pages.length,0)
@@ -241,6 +238,40 @@ async function getExistingPageNames() {
   }
   return names
 }
+async function getExistingPageNames(): Promise<Array<string>>{
+  let startCursor: string | null  = null;
+  const allCompanies: Array<{name: string}> = [] 
+  do{
+    const queryResponse: QueryDatabaseResponse = await notion.databases.query({database_id: databaseId,page_size:100,start_cursor: startCursor || undefined})
+    startCursor = queryResponse.next_cursor;
+    const companies = queryResponse.results.map(r=>  pageToCompany(r as PageObjectResponse))
+    allCompanies.push(...companies)
+    console.log(allCompanies.length)
+  }while(startCursor)
+  console.log(`found ${new Set(allCompanies.map(c=>c.name)).size} companies `)
+  return allCompanies.map(c=>c.name)
+}
+function pageToCompany(page: PageObjectResponse): {name: string}{
+  const name = getTitleFromPage(page)
+  return {name}
+}
+function getTitleFromPage(page: PageObjectResponse): string{
+  const nameProp = page.properties.Name
+    if(nameProp?.type !== 'title'){
+      throw new Error(`Name prop is not a title ${page.properties}`);
+    }
+    const titleProp = nameProp.title[0]
+    if(!titleProp){
+      console.count("Empty title")
+      return '';
+    }
+    if(titleProp?.type !== 'text'){
+      console.error(titleProp)
+      throw new Error(`Title prop is not text`);
+    }
+    return titleProp.plain_text
+    
+}
 async function main(){
   const companies = await scrapeCompanies();
   const pageNames = await getExistingPageNames();
@@ -248,5 +279,4 @@ async function main(){
   console.log({created: createdPages.length,scraped: companies.length})
 
 }
-
-main();
+main()
