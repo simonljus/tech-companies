@@ -1,5 +1,5 @@
 # tech-companies
-Add and maintain list of tech companies to Notion using the Notion API.
+Add and maintain a Notion database of tech companies Notion API.
 
 Source: [Swedish Tech News: 900+ Swedish tech startups & scaleups – the ultimate list (2022)](https://www.swedishtechnews.com/ultimate-swedish-startups-list/) 
 
