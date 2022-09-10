@@ -23,4 +23,4 @@ Source: [Swedish Tech News: 900+ Swedish tech startups & scaleups – the ultima
 
 ## Todos
 - [ ] config file for column names
-- [ ] changelog column /page data
+- [ ] changelog in column or page data
