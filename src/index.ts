@@ -102,9 +102,11 @@ function mapBy<K, V>(items: V[], getKey: (item: V) => K): Map<K, V> {
 	const m = new Map();
 	items?.forEach((item) => {
 		const key = getKey(item);
-		if (!m.has(key)) {
-			m.set(key, item);
-		}
+		if (m.has(key)) {
+      console.log("Duplicate key",key)
+		}else{
+      m.set(key, item);
+    }
 	});
 	return m;
 }
@@ -142,34 +144,45 @@ return aItems.size === bItems.size &&
 async function updateCompanyPage(company: Company, companyPage: CompanyPage) {
   let  changedProps  = false;
   const args: Required<Pick<UpdatePageParameters,'page_id' | 'properties'>> = {page_id: companyPage.pageId, properties: {}}
-  const diffs : Array<string> = []
+  const diffs : Array<{property: string, old:string, updated:string}> = []
   if(!areSetsEqual(company.cities,companyPage.cities)){
     args.properties.Cities = {multi_select: Array.from(company.cities).map(c=> ({name:c}))}
-    diffs.push(`Cities: ${Array.from(company.cities).sort()}, ${Array.from(companyPage.cities).sort()} ` )
+    diffs.push({property:'Cities',old:`${Array.from(companyPage.cities).sort()}`,updated: `${Array.from(company.cities).sort()}` })
      changedProps=true
   }
   if(!areSetsEqual(company.tags,companyPage.tags)){
     args.properties.Tags = {multi_select: Array.from(company.tags).map(t=> ({name: t}))}
-    diffs.push(`Tags: ${Array.from(company.tags).sort()}, ${Array.from(companyPage.tags).sort()}`)
+    diffs.push({property:'Tags',old:`${Array.from(companyPage.tags).sort()}`,updated: `${Array.from(company.tags).sort()}` })
     changedProps=true
  }
   if(company.raw  !== companyPage.raw){
     args.properties.Raw = {rich_text: [{text: {content: company.raw}}]}
-    diffs.push(`Raw: ${company.raw}, ${companyPage.raw}`)
+    diffs.push({property:'Raw',old:`${companyPage.raw}`,updated: `${company.raw}` })
     changedProps=true
   }
   if(company.description  !== companyPage.description){
     args.properties.Description= {rich_text: [{text: {content: company.description}}]}
-    diffs.push(`Description: ${company.description}, ${companyPage.description}`, )
+    diffs.push({property:'Description',old:`${companyPage.description}`,updated: `${company.description}` })
     changedProps=true
   }
   if(company.link  !== companyPage.link){
     args.properties.Link = {url: company.link}
-    diffs.push(`Link: ${company.link}, ${companyPage.link}`, )
+    diffs.push({property:'Link',old:`${companyPage.link}`,updated: `${company.link}` })
     changedProps=true
   }
   if(diffs.length){
-    CHANGELOG.push(`\\n Diffs ${company.name} \\n ${diffs.join("\n")} \\n`)
+    const diffStrings = diffs.map(d=> `
+    Property: ${d.property}
+    Old: ${d.old}
+    Updated: ${d.updated}
+    `)
+    const diffStr = `
+    Diffs ${company.name} 
+    ${diffStrings.join("\n")}
+    `;
+   
+    args.properties.Changelog= {rich_text: diffStrings.map(str=> ({text: {content: str}}))}
+    CHANGELOG.push(diffStr)
   }
   if(changedProps){
     const p = await notion.pages.update(args)
@@ -186,7 +199,8 @@ async function addCompanyToPage(company: Company) {
                 "Link": {url: company.link} ,
                 "Cities": {multi_select: Array.from(company.cities).map(c=> ({name:c}))},
                 "Raw": {rich_text: [{text: {content: company.raw}}]},
-                "Tags": {multi_select: Array.from(company.tags).map(t=> ({name: t}))}
+                "Tags": {multi_select: Array.from(company.tags).map(t=> ({name: t}))},
+                "Changelog":{rich_text: []}
             },
           });
           return resp.id
@@ -215,56 +229,21 @@ export function unique<K, V>(items: V[], getKey: (item: V) => K): V[] {
 	});
 	return filtered;
 }
-async function getPagesFromCursor(startCursor?: string):Promise<QueryDatabaseResponse> {
-  return notion.databases.query({database_id: databaseId, sorts:[{property:'Name',direction:'ascending'}],start_cursor: startCursor,page_size:100},);
-}
-/**
- * The rows in a database could not be accessed earlier
- * See: https://developers.notion.com/changelog/changes-for-august-31-2022
- */
-async function getExistingPageNamesSlow() {
-  const pages: Array<PageObjectResponse> = []
-  let startCursor: string | undefined  = undefined;
-  do {
-    const res: QueryDatabaseResponse = await getPagesFromCursor(startCursor)
-    const results = res.results as Array<PageObjectResponse>
-    pages.push(...results)
-    startCursor = res.next_cursor || undefined
-  }
-  while(startCursor)
-  const names = new Array<string>()
-  const bar2 = new SingleBar({},Presets.shades_classic);
-  bar2.start(pages.length,0)
-  for (const page of pages){
-    const propertyResult = await notion.pages.properties.retrieve({
-      page_id: page.id,
-      property_id: page.properties["Name"].id
-    })
-   if(propertyResult.object === 'list'){
-      const firstRes = propertyResult.results[0]
-      if(firstRes.type === 'title'){
-        names.push(firstRes.title.plain_text)
-      }
-   }
-   bar2.increment()
-  }
-  return names
-}
-async function getExistingPageNames(): Promise<Array<string>>{
- const companies = await getExistingPages()
-  return companies.map(c=>c.name)
-}
 async function getExistingPages():Promise<Array<CompanyPage>>{
   let startCursor: string | null  = null;
-  const allCompanies: Array<CompanyPage> = [] 
+  const allCompanies: Array<CompanyPage> = []
+  console.log("Read existing database") 
   do{
     const queryResponse: QueryDatabaseResponse = await notion.databases.query({database_id: databaseId,page_size:100,start_cursor: startCursor || undefined, sorts:[{property:'Name',direction:'ascending'}]})
     startCursor = queryResponse.next_cursor;
     const companies = queryResponse.results.map(r=>  pageToCompany(r as PageObjectResponse))
     allCompanies.push(...companies)
-    console.log(allCompanies.length)
+    console.log(`fetched ${allCompanies.length} rows`)
   }while(startCursor)
-  console.log(`found ${new Set(allCompanies.map(c=>c.name)).size} companies `)
+  // Check for duplicates
+  mapBy(allCompanies,c=>c.link || '')
+  const mappedByName = mapBy(allCompanies,c=>c.name || '')
+  console.log(`found ${mappedByName.size} companies `)
   return allCompanies
 }
 function pageToCompany(page: PageObjectResponse): CompanyPage{
@@ -338,11 +317,6 @@ async function main(){
  
 
 }
-async function develop(){
-  const pages = await getExistingPages()
-  console.log(pages)
-}
-
 main()
 
 
