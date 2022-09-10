@@ -5,6 +5,7 @@ import fetch from "cross-fetch";
 import { APIErrorCode, APIResponseError, Client } from "@notionhq/client";
 import { PageObjectResponse, QueryDatabaseResponse } from "@notionhq/client/build/src/api-endpoints";
 import { Presets, SingleBar } from "cli-progress";
+import { readFile } from 'fs/promises';
 const notion = new Client({ auth: process.env.NOTION_KEY });
 const databaseId = process.env.NOTION_DATABASE_ID as string;
 interface Company {
@@ -15,70 +16,11 @@ interface Company {
   raw: string;
   tags: Array<string>
 }
-function getTags(){
-    const tagMap = new Map<string,string>([
-        ['3D','3D'],
-        ['accessibility','accessibility localization'],
-        ['ads','advertisement advertise ads'],
-        ['ai','ai nlp intelligent forecasting autonomous intelligence artificial'],
-        ['animal','animal horse equestrian veterinary hunt livestock pet dog cat'],
-        ['art','art'],
-        ['audio','audio'],
-        ['b2b','b2b'],
-        ['b2c','b2c'],
-        ['battery','batteries charging electronics'],
-        ['biotech','biomed bioprinting biotech biomaterial'],
-        ['booking','booking'],
-        ['brand','scale branding'],
-        ['cloud','cloud'],
-        ['construction','construction architect building'],
-        ['crypto','crypto cryptocurrency blockchain'],
-        ['customer','loyalty'],
-        ['developers','code api backend'],
-        ['education','student learning education university'],
-        ['iot','embedded iot things'],
-        ['environment','recycle recycling vegan vegetarian plant sustainable organic ecological bike battery electric energy charging climate circular carbon forestry nature composable waste disease ev fossil fertilizer algae pollution pollutants'],
-        ['energy','battery power energy electricity charging solar'],
-        ['event','event'],
-        ['legal','legal lawyer'],
-        ['family','baby pregnancy relationship couple dating birth elderly divorce funeral children mother wedding parents'],
-        ['fashion','shoes clothes fashion textile beauty wearable footwear'],
-        ['finance','fintech financial finance bank stocks payment credit transaction expense earn income trading cash paid debt loan pay billing'],
-        ['food','food vegan bee nutrition kitchen milk potato fishing farming farmer meat dairy seafood grocery restaurant meal lunch dinner breakfast cooked seaweed snacks cheese'],
-        ['furniture','furniture'],
-        ['gaming','games game esport gaming'],
-        ['hardware','hardware'],
-        ['health',' genetic doctor nurse patient health asthma clinical blood diabetes heart MRI cancer gene medicine telemedicine healthcare medical therapy drug dementia wound pain treatment injuries wellness  sleep stress disorder gut mental'],
-        ['home','gardening'],
-        ['job','recruiter recruitment hr salary employer employee job freelancer career office'],
-        ['home', 'tenant room home homeowner'],
-        ['hotel','hotel camping campsite'],
-        ['marketplace','selling buying renting subscription marketplace'],
-        ['mail','mail mailbox'],
-        ['music','music instrument dj choir singer'],
-        ['network','5G VPN'],
-        ['insurance','insurance'],
-        ['logistics','logistics'],
-        ['quantum mechanics','quantum'],
-        ['retail', 'buy sell rent seller subscription shopping retail'],
-        ['robotics','robots robotics'],
-        ['security','secure encryption encrypted security'],
-        ['search','search'],
-        ['social','social'],
-        ['sport','football golf sport bowlers fitness skiing fitness walking'],
-        ['saas','saas platform'],
-        ['storage','storage'],
-        ['subscription','subscription rental'],
-        ['transport','train vehicle car plane airplane flight bike transport motorcycle boat wheel road drone delivery cart carsharing motorhome ev scooter truck'],
-        ['threat','threat'],
-        ['media','video film photo images filmmakers audiobook ebook'],
-        ['water','water'],
-        ['women','female women mother pregnancy birth'],
-        ['visualization','vr ar visualize graph'],
-        ['web3','web3']
-    ])
+async function getTags(){
     const stemMap = new Map<string,Set<string>>()
-    tagMap.forEach((tokens,tag) =>  
+    const fileContents = await readFile('data/tags.json','utf-8');
+    const tagMap = JSON.parse(fileContents) as Record<string,string>
+    Object.entries(tagMap).forEach(([tag,tokens]) =>  
         {
             const stemmed = natural.PorterStemmer.tokenizeAndStem(tokens)
             stemmed.forEach(word=>{
@@ -94,10 +36,10 @@ function getTags(){
     return stemMap
 }
 async function scrapeCompanies() {
+  const tagMap = await getTags();
   const url = "https://www.swedishtechnews.com/ultimate-swedish-startups-list/";
   const text = await (await fetch(url)).text();
   const root = parse(text);
-  const tagMap = getTags();
   const companies: Array<Company> = root
     .querySelectorAll(
       "body > div.site > div > div > main > article > div.post-content.gh-content.kg-canvas > p:nth-child(1) > a "
@@ -243,6 +185,10 @@ async function getExistingPageNamesSlow() {
   return names
 }
 async function getExistingPageNames(): Promise<Array<string>>{
+ const companies = await getExistingPages()
+  return companies.map(c=>c.name)
+}
+async function getExistingPages():Promise<Array<{name:string}>>{
   let startCursor: string | null  = null;
   const allCompanies: Array<{name: string}> = [] 
   do{
@@ -253,11 +199,21 @@ async function getExistingPageNames(): Promise<Array<string>>{
     console.log(allCompanies.length)
   }while(startCursor)
   console.log(`found ${new Set(allCompanies.map(c=>c.name)).size} companies `)
-  return allCompanies.map(c=>c.name)
+  return allCompanies
 }
-function pageToCompany(page: PageObjectResponse): {name: string}{
+function pageToCompany(page: PageObjectResponse): {name: string,tags: Array<string>}{
   const name = getTitleFromPage(page)
-  return {name}
+  const tags = getTagsFromPage(page)
+  return {name,tags}
+}
+function getTagsFromPage(page: PageObjectResponse): Array<string>{
+  const nameProp = page.properties.Tags
+    if(nameProp?.type !== 'multi_select'){
+      throw new Error(`Tags prop is not a multiselect ${page.properties}`);
+    }
+    const selections = nameProp?.multi_select.map(s=> s.name)
+    return selections
+    
 }
 function getTitleFromPage(page: PageObjectResponse): string{
   const nameProp = page.properties.Name
@@ -283,4 +239,10 @@ async function main(){
   console.log({created: createdPages.length,scraped: companies.length})
 
 }
+async function develop(){
+  const tags = await getTags()
+  //const pages = await getExistingPages()
+  console.log(tags)
+}
+
 main()
