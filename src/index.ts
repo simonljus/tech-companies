@@ -3,10 +3,10 @@ import 'dotenv/config'
 import * as natural from 'natural';
 import fetch from "cross-fetch";
 import { APIErrorCode, APIResponseError, Client } from "@notionhq/client";
-import { PageObjectResponse, QueryDatabaseResponse, updatePage, UpdatePageParameters } from "@notionhq/client/build/src/api-endpoints";
+import { PageObjectResponse, QueryDatabaseResponse, UpdatePageParameters } from "@notionhq/client/build/src/api-endpoints";
 import { Presets, SingleBar } from "cli-progress";
 import { readFile } from 'fs/promises';
-const notion = new Client({ auth: process.env.NOTION_KEY });
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const databaseId = process.env.NOTION_DATABASE_ID as string;
 interface Company {
   cities: Set<string>;
