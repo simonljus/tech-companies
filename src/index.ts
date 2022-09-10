@@ -7,6 +7,7 @@ import { PageObjectResponse, QueryDatabaseResponse, UpdatePageParameters } from 
 import { Presets, SingleBar } from "cli-progress";
 import { readFile } from 'fs/promises';
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
+const CHANGELOG : Array<string> = []
 const databaseId = process.env.NOTION_DATABASE_ID as string;
 interface Company {
   cities: Set<string>;
@@ -149,7 +150,7 @@ async function updateCompanyPage(company: Company, companyPage: CompanyPage) {
   }
   if(!areSetsEqual(company.tags,companyPage.tags)){
     args.properties.Tags = {multi_select: Array.from(company.tags).map(t=> ({name: t}))}
-    diffs.push(`Name: ${Array.from(company.tags).sort()}, ${Array.from(companyPage.tags).sort()}`)
+    diffs.push(`Tags: ${Array.from(company.tags).sort()}, ${Array.from(companyPage.tags).sort()}`)
     changedProps=true
  }
   if(company.raw  !== companyPage.raw){
@@ -168,9 +169,7 @@ async function updateCompanyPage(company: Company, companyPage: CompanyPage) {
     changedProps=true
   }
   if(diffs.length){
-    console.log(`\n Diffs ${company.name}`)
-    console.log(diffs.join("\n"))
-    console.log(`\n`)
+    CHANGELOG.push(`\\n Diffs ${company.name} \\n ${diffs.join("\n")} \\n`)
   }
   if(changedProps){
     const p = await notion.pages.update(args)
@@ -333,6 +332,10 @@ async function main(){
   const pageIds =await addCompaniesToNotion({companies, existing})
   console.log("\n Done \n")
   console.log({created: pageIds.created.length,scraped: companies.length,updated: pageIds.updated.length, unchanged:pageIds.unchanged.length})
+  if(CHANGELOG.length){
+    console.log(CHANGELOG)
+  }
+ 
 
 }
 async function develop(){
