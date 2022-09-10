@@ -6,11 +6,12 @@ import { APIErrorCode, APIResponseError, Client } from "@notionhq/client";
 import { PageObjectResponse, QueryDatabaseResponse, UpdatePageParameters } from "@notionhq/client/build/src/api-endpoints";
 import { Presets, SingleBar } from "cli-progress";
 import { readFile } from 'fs/promises';
+import { CompanyColumn } from "./models/configs.model";
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const CHANGELOG : Array<string> = []
 const databaseId = process.env.NOTION_DATABASE_ID as string;
 interface Company {
-  cities: Set<string>;
+  locations: Set<string>;
   description: string;
   name: string;
   link: string | null;
@@ -90,7 +91,7 @@ async function scrapeCompanies() {
         link: n.getAttribute("href") || null,
         name: n.textContent,
         description:text,
-        cities: new Set<string>(cities.map(c=> c?.trim()).filter(c=> !!c)),
+        locations: new Set<string>(cities.map(c=> c?.trim()).filter(c=> !!c)),
         raw,
         tags: new Set<string>(tags.map(t=> t?.trim()).filter(t=>!!t))
       };
@@ -145,29 +146,29 @@ async function updateCompanyPage(company: Company, companyPage: CompanyPage) {
   let  changedProps  = false;
   const args: Required<Pick<UpdatePageParameters,'page_id' | 'properties'>> = {page_id: companyPage.pageId, properties: {}}
   const diffs : Array<{property: string, old:string, updated:string}> = []
-  if(!areSetsEqual(company.cities,companyPage.cities)){
-    args.properties.Cities = {multi_select: Array.from(company.cities).map(c=> ({name:c}))}
-    diffs.push({property:'Cities',old:`${Array.from(companyPage.cities).sort()}`,updated: `${Array.from(company.cities).sort()}` })
+  if(!areSetsEqual(company.locations,companyPage.locations)){
+    args.properties[CompanyColumn.LOCATIONS] = {multi_select: Array.from(company.locations).map(c=> ({name:c}))}
+    diffs.push({property:CompanyColumn.LOCATIONS,old:`${Array.from(companyPage.locations).sort()}`,updated: `${Array.from(company.locations).sort()}` })
      changedProps=true
   }
   if(!areSetsEqual(company.tags,companyPage.tags)){
-    args.properties.Tags = {multi_select: Array.from(company.tags).map(t=> ({name: t}))}
-    diffs.push({property:'Tags',old:`${Array.from(companyPage.tags).sort()}`,updated: `${Array.from(company.tags).sort()}` })
+    args.properties[CompanyColumn.TAGS] = {multi_select: Array.from(company.tags).map(t=> ({name: t}))}
+    diffs.push({property:CompanyColumn.TAGS,old:`${Array.from(companyPage.tags).sort()}`,updated: `${Array.from(company.tags).sort()}` })
     changedProps=true
  }
   if(company.raw  !== companyPage.raw){
-    args.properties.Raw = {rich_text: [{text: {content: company.raw}}]}
-    diffs.push({property:'Raw',old:`${companyPage.raw}`,updated: `${company.raw}` })
+    args.properties[CompanyColumn.RAW_DATA]= {rich_text: [{text: {content: company.raw}}]}
+    diffs.push({property:CompanyColumn.RAW_DATA,old:`${companyPage.raw}`,updated: `${company.raw}` })
     changedProps=true
   }
   if(company.description  !== companyPage.description){
-    args.properties.Description= {rich_text: [{text: {content: company.description}}]}
-    diffs.push({property:'Description',old:`${companyPage.description}`,updated: `${company.description}` })
+    args.properties[CompanyColumn.DESCRIPTION]= {rich_text: [{text: {content: company.description}}]}
+    diffs.push({property: CompanyColumn.DESCRIPTION,old:`${companyPage.description}`,updated: `${company.description}` })
     changedProps=true
   }
   if(company.link  !== companyPage.link){
-    args.properties.Link = {url: company.link}
-    diffs.push({property:'Link',old:`${companyPage.link}`,updated: `${company.link}` })
+    args.properties[CompanyColumn.LINK] = {url: company.link}
+    diffs.push({property:CompanyColumn.LINK,old:`${companyPage.link}`,updated: `${company.link}` })
     changedProps=true
   }
   if(diffs.length){
@@ -194,13 +195,13 @@ async function addCompanyToPage(company: Company) {
         const resp = await notion.pages.create({
             parent: { database_id: databaseId },
             properties: { 
-                "Name": { title: [{ text: { content: company.name } }] },
-                "Description": {rich_text: [{text: {content: company.description}}]},
-                "Link": {url: company.link} ,
-                "Cities": {multi_select: Array.from(company.cities).map(c=> ({name:c}))},
-                "Raw": {rich_text: [{text: {content: company.raw}}]},
-                "Tags": {multi_select: Array.from(company.tags).map(t=> ({name: t}))},
-                "Changelog":{rich_text: []}
+                [CompanyColumn.NAME]: { title: [{ text: { content: company.name } }] },
+                [CompanyColumn.DESCRIPTION]: {rich_text: [{text: {content: company.description}}]},
+                [CompanyColumn.LINK]: {url: company.link} ,
+                [CompanyColumn.LOCATIONS]: {multi_select: Array.from(company.locations).map(c=> ({name:c}))},
+                [CompanyColumn.RAW_DATA]: {rich_text: [{text: {content: company.raw}}]},
+                [CompanyColumn.TAGS]: {multi_select: Array.from(company.tags).map(t=> ({name: t}))},
+                [CompanyColumn.CHANGELOG]:{rich_text: []}
             },
           });
           return resp.id
@@ -234,7 +235,7 @@ async function getExistingPages():Promise<Array<CompanyPage>>{
   const allCompanies: Array<CompanyPage> = []
   console.log("Read existing database") 
   do{
-    const queryResponse: QueryDatabaseResponse = await notion.databases.query({database_id: databaseId,page_size:100,start_cursor: startCursor || undefined, sorts:[{property:'Name',direction:'ascending'}]})
+    const queryResponse: QueryDatabaseResponse = await notion.databases.query({database_id: databaseId,page_size:100,start_cursor: startCursor || undefined, sorts:[{property:CompanyColumn.NAME,direction:'ascending'}]})
     startCursor = queryResponse.next_cursor;
     const companies = queryResponse.results.map(r=>  pageToCompany(r as PageObjectResponse))
     allCompanies.push(...companies)
@@ -248,13 +249,13 @@ async function getExistingPages():Promise<Array<CompanyPage>>{
 }
 function pageToCompany(page: PageObjectResponse): CompanyPage{
   const name = getTitleFromPage(page)
-  const tags = getMultiSelectNamesFromPage(page,'Tags')
-  const cities = getMultiSelectNamesFromPage(page,'Cities')
-  const link = getURLFromPage(page,'Link')
-  const description = getTextFromPage(page,'Description')
-  const raw = getTextFromPage(page,'Raw')
+  const tags = getMultiSelectNamesFromPage(page,CompanyColumn.TAGS)
+  const locations = getMultiSelectNamesFromPage(page,CompanyColumn.LOCATIONS)
+  const link = getURLFromPage(page,CompanyColumn.LINK)
+  const description = getTextFromPage(page,CompanyColumn.DESCRIPTION)
+  const raw = getTextFromPage(page,CompanyColumn.RAW_DATA)
   const pageId = page.id
-  return {name,tags,cities,link,description,raw,pageId}
+  return {name,tags,locations,link,description,raw,pageId}
 }
 function getTextFromPage(page: PageObjectResponse,column: string): string{
   const prop = page.properties[column]
@@ -289,9 +290,9 @@ function getMultiSelectNamesFromPage(page: PageObjectResponse,column: string): S
     
 }
 function getTitleFromPage(page: PageObjectResponse): string{
-  const nameProp = page.properties.Name
+  const nameProp = page.properties[CompanyColumn.NAME]
     if(nameProp?.type !== 'title'){
-      throw new Error(`Name prop is not a title ${page.properties}`);
+      throw new Error(`${CompanyColumn.NAME} prop is not a title ${page.properties}`);
     }
     const titleProp = nameProp.title[0]
     if(!titleProp){

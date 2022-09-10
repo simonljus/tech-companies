@@ -11,7 +11,9 @@ Source: [Swedish Tech News: 900+ Swedish tech startups & scaleups – the ultima
 * Adding tags based on the company description using stemming.
   * The tags can be modified in `data/tags.json`
 
-
+## Customization
+* The tags can be modified in `data/tags.json`
+* The column names can be modified in the file `src/models/configs.model.ts`
 ## How to run locally 
 - Follow step 1 and 2 in the [Notion developer documentation](https://developers.notion.com/docs/getting-started) to get the Notion API key and Database ID
 - Create a .env file
@@ -22,5 +24,5 @@ Source: [Swedish Tech News: 900+ Swedish tech startups & scaleups – the ultima
 - Npm run start
 
 ## Todos
-- [ ] config file for column names
-- [ ] changelog in column or page data
+- [x] config file for column names
+- [x] changelog in column or page data
