@@ -40,7 +40,7 @@
     "marketplace": "buying marketplace renting selling subscription",
     "mail": "mail mailbox",
     "marketing": "ads advertise advertisement marketing",
-    "media": "audiobook ebook film filmmakers messages images streaming photo podcast video",
+    "media": "audiobook ebook film filmmakers messages news images streaming photo podcast video",
     "music": "choir dj instrument music singer drum",
     "network": "5G VPN",
     "insurance": "insurance",
@@ -61,5 +61,5 @@
     "water": "water",
     "web3": "web3",
     "women": "birth female mother pregnancy women",
-    "work": "career employee employer freelancer hr job meetings office recruiter recruitment salary workplace"
+    "work": "career employee employer freelancer hr job meetings office payroll recruiter recruitment salary workplace"
 }
